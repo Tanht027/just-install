@@ -71,9 +71,16 @@ func handleInstall(c *cli.Context) error {
 			continue
 		}
 
+		options, err := entry.Installer.OptionsForArch(arch)
+		if err != nil {
+			return err
+		}
+
 		if onlyShims {
-			// FIXME:
-			// entry.CreateShims(arch)
+			if err := createShims(options); err != nil {
+				return err
+			}
+
 			continue
 		}
 
@@ -88,11 +95,6 @@ func handleInstall(c *cli.Context) error {
 			continue
 		}
 
-		options, err := entry.Installer.OptionsForArch(arch)
-		if err != nil {
-			return err
-		}
-
 		installerPath, err = maybeExtractContainer(installerPath, options)
 		if err != nil {
 			return err
@@ -104,6 +106,9 @@ func handleInstall(c *cli.Context) error {
 			continue
 		}
 
+		if exeproxyExists() {
+			createShims(options)
+		}
 	}
 
 	if hasErrors {
@@ -337,6 +342,45 @@ func install(path string, kind string, options *registry4.Options) error {
 	}
 
 	return cmd.Run(installerCommand...)
+}
+
+func exeproxyExists() bool {
+	exeproxy := os.ExpandEnv("${ProgramFiles(x86)}\\exeproxy\\exeproxy.exe")
+
+	return dry.FileExists(exeproxy)
+}
+
+func createShims(options *registry4.Options) error {
+	exeproxy := os.ExpandEnv("${ProgramFiles(x86)}\\exeproxy\\exeproxy.exe")
+
+	if !dry.FileIsDir(shimsPath) {
+		if err := os.MkdirAll(shimsPath, 0); err != nil {
+			return fmt.Errorf("could not create shims directory %s: %w", shimsPath, err)
+		}
+	}
+
+	for _, v := range options.Shims {
+		shimTarget, err := expandString(v, map[string]string{})
+		if err != nil {
+			return err
+		}
+
+		shim := filepath.Join(shimsPath, filepath.Base(shimTarget))
+
+		if dry.FileExists(shim) {
+			if err := os.Remove(shim); err != nil {
+				return fmt.Errorf("could not re-create shim %s: %w", shim, err)
+			}
+		}
+
+		log.Printf("creating shim for %s (%s)\n", shimTarget, shim)
+
+		if err := cmd.Run(exeproxy, "exeproxy-copy", shim, shimTarget); err != nil {
+			return fmt.Errorf("could not create shim %s for %s: %w", shim, shimTarget, err)
+		}
+	}
+
+	return nil
 }
 
 func isEmptyString(s string) bool {
