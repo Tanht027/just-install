@@ -103,7 +103,8 @@ func deploy() {
 		log.Fatalf("unable to commit: %v", err)
 	}
 
-	if err := run("git", "push", "--force"); err != nil {
+	// FIXME: remove this change
+	if err := run("git", "push", "--force", "HEAD:test-actions-v2"); err != nil {
 		log.Fatalf("cannot push to git repo: %v", err)
 	}
 }
@@ -127,6 +128,8 @@ func getVersion() string {
 }
 
 func isStableBuild() bool {
+	return true // FIXME: remove this
+
 	ref, ok := dry.EnvironMap()["GITHUB_REF"]
 	return ok && strings.HasPrefix(ref, "refs/tags/")
 }
@@ -136,14 +139,10 @@ func run(name string, arg ...string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	cmd.Env = append(cmd.Env,
-		"GIT_AUTHOR_EMAIL=CI",
-		"GIT_AUTHOR_NAME=CI",
-		"GIT_COMMITTER_EMAIL=CI",
-		"GIT_COMMITTER_NAME=CI",
-		// HACK: For some reason we can pull with a valid known_hosts file but pushing raises an
-		// error, hence we disable host key checking for now. Since we are going from github.com to
-		// github.com this is probably OK.
-		"GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no",
+		"GIT_AUTHOR_EMAIL=github-actions@github.com",
+		"GIT_AUTHOR_NAME=github-actions",
+		"GIT_COMMITTER_EMAIL=github-actions@github.com",
+		"GIT_COMMITTER_NAME=github-actions",
 	)
 
 	return cmd.Run()
